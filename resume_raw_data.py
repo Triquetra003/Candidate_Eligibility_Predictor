@@ -178,16 +178,44 @@ resume_data['cleaned_end_dates']=end_dates;
 
 # Experience calculation based on cleaned start_dates and end_dates columns
 # Employment intervals with chronologically invalid dates were excluded from experience calculation.
-# for i in range(len(start_dates)):
-#     if isinstance(start_dates[i], list) and isinstance(end_dates[i], list):
-#         for j in range(len(start_dates[i])):
-#             if pd.notna(start_dates[i][j]) and pd.notna(end_dates[i][j]):
-#                 if start_dates[i][j] > end_dates[i][j]:
-#                     print("Invalid:", i, j)
+experience_timelines=[];
 
-# checking overlaps
+for i in range(len(start_dates)):
+    timelines=[];
+    if isinstance(start_dates[i],list) and isinstance(end_dates[i],list):
+        for j in range(len(start_dates[i])):
+            start=start_dates[i][j];
+            end=end_dates[i][j];
+            if pd.notna(start) and pd.notna(end) and start<=end:
+                timelines.append((start,end))
+    experience_timelines.append(timelines);
+
+merged_timelines=[];
+for i in range(len(experience_timelines)):
+    # Sort by start_dates
+    if not experience_timelines[i]:
+        # overlapping timelines of each candidate are stored in merged_timeline and when all timelines of that candidate have been considered, store them in merged_timelines
+        merged_timelines.append([]);
+        continue;
+    experience_timelines[i].sort(key=lambda x:x[0])
+    # current_timeline = each candidate's earliest start date
+    current_timeline=experience_timelines[i][0]
+    merged_timeline=[];
+    for j in range(1,len(experience_timelines[i])):
+        # handling overlapping timelines
+        if current_timeline[1]>=experience_timelines[i][j][0]:
+            current_timeline=((current_timeline[0],max(current_timeline[1],experience_timelines[i][j][1])));
+        else:
+          merged_timeline.append(current_timeline);
+          current_timeline=experience_timelines[i][j];
+    merged_timeline.append(current_timeline);
+    merged_timelines.append(merged_timeline);
+
+# calculate experience 
 
 
+
+       
 
 
 
