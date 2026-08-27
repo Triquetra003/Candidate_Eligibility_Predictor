@@ -212,7 +212,51 @@ for i in range(len(experience_timelines)):
     merged_timelines.append(merged_timeline);
 
 # calculate experience 
+experience=[]
+for i in range(len(merged_timelines)):
+    duration=[];
+    for j in range(len(merged_timelines[i])):
+        duration.append(merged_timelines[i][j][1]-merged_timelines[i][j][0])
+    total=sum(duration,pd.Timedelta(0));
+    experience.append(total)
+# Experience days to years
+for i in range(len(experience)):
+    experience[i]=experience[i].days//365;
+# create new column
+resume_data['experience']=experience;
 
+#experiencere_requirement
+experience_requirement=resume_data['experiencere_requirement'];
+words=[]
+for i in range(len(experience_requirement)):
+    if pd.notna(experience_requirement[i]):
+        words.append(experience_requirement[i].split());
+    else:
+        words.append([])
+min_experience_requirement=[];
+max_experience_requirement=[];
+for i in range(len(words)):
+    minimum=None;
+    maximum=None;
+    count=0;
+    for j in range(len(words[i])):
+        if words[i][j].isdigit():
+            count+=1;
+            if count==1:
+                minimum=int(words[i][j]);
+            elif count==2:
+                maximum=int(words[i][j])
+    min_experience_requirement.append(minimum);
+    max_experience_requirement.append(maximum);
+resume_data['min_experience_requirement']=min_experience_requirement;
+resume_data['max_experience_requirement']=max_experience_requirement;
+print(resume_data[['min_experience_requirement','max_experience_requirement']].head(20))
+
+
+
+
+    
+    
 
 
        
