@@ -1,11 +1,11 @@
 import ast
-
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 resume_data=pd.read_csv('resume_data.csv');
 
-print(resume_data.info());
+resume_data.info()
 
 # RangeIndex: 9544 entries, 0 to 9543
 # Data columns (total 35 columns):
@@ -50,7 +50,7 @@ print(resume_data.info());
 # memory usage: 2.5 MB
 # None
 
-print(resume_data.describe());
+resume_data.describe()
 
 #        matched_score
 # count    9544.000000
@@ -71,8 +71,8 @@ print(resume_data['matched_score'].mean());
 
 # DATA CLEANING
 # -------------
-print("Null values in each column:");
-print(resume_data.isnull().sum());
+# Null values
+resume_data.isnull().sum()
 # address                                8760
 # career_objective                       4804
 # skills                                   56
@@ -136,7 +136,7 @@ resume_data.duplicated().sum();
 # Removing unnecessary characters,  whitespace and transformation to lower case 
 
 split_skills_req=resume_data['skills_required'].str.split('\n')
-strip_skills_req=split_skills_req.apply(lambda x: [i.strip().replace("•", "").lower() for i in x] if isinstance(x, list) else "No Requirements")
+strip_skills_req=split_skills_req.apply(lambda x: [i.strip().replace("•", "").lower() for i in x] if isinstance(x, list) else [])
 cleaned_skills_req=strip_skills_req;
 
 split_skills=resume_data['skills'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
@@ -250,16 +250,11 @@ for i in range(len(words)):
     max_experience_requirement.append(maximum);
 resume_data['min_experience_requirement']=min_experience_requirement;
 resume_data['max_experience_requirement']=max_experience_requirement;
-print(resume_data[['min_experience_requirement','max_experience_requirement']].head(20))
 
+# Age requirement was not used because the dataset contains job age requirements but candidate age is not provided.
 
-
-
-    
-    
-
-
-       
+# Educational requirement
+# to be filled
 
 
 
@@ -267,11 +262,78 @@ print(resume_data[['min_experience_requirement','max_experience_requirement']].h
 
 
 
+# Matched Skills Percentage
+skill_match=[]
+for i in range(len(cleaned_skills)):
+    count=0;
+    for j in cleaned_skills_req[i]:
+        for k in cleaned_skills[i]:
+            if j in k:
+                count+=1;
+                break;
+    if len(cleaned_skills_req[i])==0:
+        skill_match.append(np.nan)
+    else:
+        match_percent=(count/len(cleaned_skills_req[i]));
+        skill_match.append(match_percent);
+resume_data['skill_match']=skill_match
 
-# DATA VISUALIZATION
+print(resume_data[['matched_score', 'skill_match']].corr())
+print(resume_data.loc[resume_data['skill_match'] > 0,
+                      ['skills', 'skills_required', 'skill_match']].head(10))
+
+
+
+
+# EDA
 # ------------------
-# resume_data['matched_score'].hist(bins=20);
-# plt.show();
+resume_data['matched_score'].hist(bins=20);
+plt.show();
 
-# resume_data.plot.scatter(x='experience', y='matched_score');
-# plt.show();
+resume_data.plot.scatter(x='experience', y='matched_score');
+plt.show();
+
+resume_data.plot.scatter(x='max_experience_requirement', y='matched_score');
+plt.show();
+
+resume_data['matched_score'].describe();
+
+# Random Forest Regression Model
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+import numpy as np
+
+x = resume_data[['experience',
+                 'min_experience_requirement',
+                 'max_experience_requirement',
+                 'skill_match']]
+y = resume_data['matched_score']
+x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=0.2,random_state=42)
+
+# remove NaN
+min_median = x_train['min_experience_requirement'].median()
+max_median = x_train['max_experience_requirement'].median()
+skill_median = x_train['skill_match'].median()
+x_train['min_experience_requirement'] = x_train['min_experience_requirement'].fillna(min_median)
+x_train['max_experience_requirement'] = x_train['max_experience_requirement'].fillna(max_median)
+x_test['skill_match'] = x_test['skill_match'].fillna(skill_median)
+
+model = RandomForestRegressor(n_estimators=100,random_state=42)
+model.fit(x_train, y_train)
+
+y_pred = model.predict(x_test)
+
+r2 = r2_score(y_test, y_pred)
+mae = mean_absolute_error(y_test, y_pred)
+rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+
+print("R²:", r2)
+print("MAE:", mae)
+print("RMSE:", rmse)
+
+
+
+
+
+
