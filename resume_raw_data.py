@@ -278,12 +278,32 @@ for i in range(len(cleaned_skills)):
         skill_match.append(match_percent);
 resume_data['skill_match']=skill_match
 
-print(resume_data[['matched_score', 'skill_match']].corr())
-print(resume_data.loc[resume_data['skill_match'] > 0,
-                      ['skills', 'skills_required', 'skill_match']].head(10))
 
 
+# TF-IDF and cosine similarity between job position and candidate position
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
+# job position Data Cleaning
+candidate_positions = resume_data['positions'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else [])
+candidate_positions = candidate_positions.apply(lambda x: ' '.join(str(i) for i in x if i is not None))
+job_positions = resume_data['\ufeffjob_position_name'].apply(lambda x: str(x) if pd.notna(x) else '') 
+all_positions = pd.concat([candidate_positions, job_positions])
+
+vectorizer = TfidfVectorizer()
+tfidf = vectorizer.fit_transform(all_positions)
+candidate_tfidf = tfidf[:len(candidate_positions)]
+job_tfidf = tfidf[len(candidate_positions):]
+
+position_similarity = []
+for i in range(len(candidate_positions)):
+    similarity = cosine_similarity(
+        candidate_tfidf[i],
+        job_tfidf[i]
+    )[0][0]
+    position_similarity.append(similarity)
+resume_data['position_similarity'] = position_similarity
+print(resume_data['position_similarity'].describe())
 
 # EDA
 # ------------------
@@ -298,7 +318,7 @@ plt.show();
 
 resume_data['matched_score'].describe();
 
-# Random Forest Regression Model
+# Random Forest 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
@@ -307,33 +327,39 @@ import numpy as np
 x = resume_data[['experience',
                  'min_experience_requirement',
                  'max_experience_requirement',
-                 'skill_match']]
-y = resume_data['matched_score']
-x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=0.2,random_state=42)
+                 'skill_match',
+                 'position_similarity']]
 
-# remove NaN
+y = resume_data['matched_score']
+
+x_train, x_test, y_train, y_test = train_test_split(
+    x, y, test_size=0.2, random_state=42
+)
+
 min_median = x_train['min_experience_requirement'].median()
 max_median = x_train['max_experience_requirement'].median()
 skill_median = x_train['skill_match'].median()
+
 x_train['min_experience_requirement'] = x_train['min_experience_requirement'].fillna(min_median)
 x_train['max_experience_requirement'] = x_train['max_experience_requirement'].fillna(max_median)
+x_train['skill_match'] = x_train['skill_match'].fillna(skill_median)
+
+x_test['min_experience_requirement'] = x_test['min_experience_requirement'].fillna(min_median)
+x_test['max_experience_requirement'] = x_test['max_experience_requirement'].fillna(max_median)
 x_test['skill_match'] = x_test['skill_match'].fillna(skill_median)
 
-model = RandomForestRegressor(n_estimators=100,random_state=42)
+model = RandomForestRegressor(
+    n_estimators=100,
+    random_state=42
+)
+
 model.fit(x_train, y_train)
 
 y_pred = model.predict(x_test)
 
-r2 = r2_score(y_test, y_pred)
-mae = mean_absolute_error(y_test, y_pred)
-rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-
-print("R²:", r2)
-print("MAE:", mae)
-print("RMSE:", rmse)
-
-
-
+print("R²:", r2_score(y_test, y_pred))
+print("MAE:", mean_absolute_error(y_test, y_pred))
+print("RMSE:", np.sqrt(mean_squared_error(y_test, y_pred)))
 
 
 
