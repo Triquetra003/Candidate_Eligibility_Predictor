@@ -2,6 +2,7 @@ import ast
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 
 resume_data=pd.read_csv('resume_data.csv');
 
@@ -132,8 +133,7 @@ resume_data.duplicated().sum();
 #    'At least 2 years',       '5 to 6 years',       '1 to 2 years']
 # Length: 18, dtype: str
 
-# Cleaning the 'skills_required' and 'skills' columns 
-# Removing unnecessary characters,  whitespace and transformation to lower case 
+# Cleaning and extracting information from the 'skills_required' and 'skills' columns 
 
 split_skills_req=resume_data['skills_required'].str.split('\n')
 strip_skills_req=split_skills_req.apply(lambda x: [i.strip().replace("•", "").lower() for i in x] if isinstance(x, list) else [])
@@ -143,9 +143,42 @@ split_skills=resume_data['skills'].apply(lambda x: ast.literal_eval(x) if isinst
 strip_skills=split_skills.apply(lambda x: [i.strip().replace("•", "").lower() for i in x] if isinstance(x, list) else "No Skills")
 cleaned_skills=strip_skills;
 
-# The cleaned anf normalized to lower case values are stored in new columns
+# The cleaned and normalized to lower case values are stored in new columns
 resume_data['cleaned_skills_required']=cleaned_skills_req;
 resume_data['cleaned_skills']=cleaned_skills;
+
+# Number of skills 
+num_skills = []
+for i in range(len(resume_data)):
+    if isinstance(resume_data['cleaned_skills'][i], list):
+        num_skills.append(len(resume_data['cleaned_skills'][i]))
+    else:
+        num_skills.append(0)
+resume_data['num_skills'] = num_skills
+# Number of skills required
+num_skills_required = []
+for i in range(len(resume_data)):
+    if isinstance(resume_data['cleaned_skills_required'][i], list):
+        num_skills_required.append(len(resume_data['cleaned_skills_required'][i]))
+    else:
+        num_skills_required.append(0)
+resume_data['num_skills_required'] = num_skills_required
+
+# Matched Skills Percentage
+skill_match=[]
+for i in range(len(cleaned_skills)):
+    count=0;
+    for j in cleaned_skills_req[i]:
+        for k in cleaned_skills[i]:
+            if j in k:
+                count+=1;
+                break;
+    if len(cleaned_skills_req[i])==0:
+        skill_match.append(np.nan)
+    else:
+        match_percent=(count/len(cleaned_skills_req[i]));
+        skill_match.append(match_percent);
+resume_data['skill_match']=skill_match
 
 # Cleaning the start_dates and end_dates columns to extract the year of experience
 
@@ -251,33 +284,66 @@ for i in range(len(words)):
 resume_data['min_experience_requirement']=min_experience_requirement;
 resume_data['max_experience_requirement']=max_experience_requirement;
 
-# Age requirement was not used because the dataset contains job age requirements but candidate age is not provided.
+# experience_required_years
+experience_required_years = []
+for i in range(len(resume_data)):
+    text = str(resume_data['experiencere_requirement'][i])
+    match = re.search(r'\d+', text)
+    if match:
+        experience_required_years.append(float(match.group()))
+    else:
+        experience_required_years.append(np.nan)
+resume_data['experience_required_years'] = experience_required_years
+
+# responsibility similarity
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+candidate_responsibilities = resume_data['responsibilities'].apply(lambda x: str(x) if pd.notna(x) else '')
+job_responsibilities = resume_data['responsibilities.1'].apply(lambda x: str(x) if pd.notna(x) else '')
+all_responsibilities = pd.concat([candidate_responsibilities,job_responsibilities])
+
+vectorizer = TfidfVectorizer()
+tfidf = vectorizer.fit_transform(all_responsibilities)
+candidate_tfidf = tfidf[:len(candidate_responsibilities)]
+job_tfidf = tfidf[len(candidate_responsibilities):]
+
+responsibility_similarity = []
+for i in range(len(candidate_responsibilities)):
+    similarity = cosine_similarity(candidate_tfidf[i],job_tfidf[i])[0][0]
+    responsibility_similarity.append(similarity)
+
+resume_data['responsibility_similarity'] = responsibility_similarity
+
+# Age requirement (dataset contains job age requirements but candidate age is not provided)
+# Create boolean (0 or 1) column to check if requirement exists or not 
+has_age_requirement = []
+for i in range(len(resume_data)):
+    if pd.isna(resume_data['age_requirement'][i]):
+        has_age_requirement.append(0)
+    else:
+        has_age_requirement.append(1)
+resume_data['has_age_requirement'] = has_age_requirement
 
 # Educational requirement
-# to be filled
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
+candidate_education = resume_data['degree_names'].apply(lambda x: ' '.join(str(i) for i in x if i is not None) if isinstance(x, list) else '')
+job_education = resume_data['educationaL_requirements'].apply(lambda x: str(x) if pd.notna(x) else '')
+all_education = pd.concat([candidate_education,job_education])
 
+vectorizer = TfidfVectorizer()
+tfidf = vectorizer.fit_transform(all_education)
 
+candidate_tfidf = tfidf[:len(candidate_education)]
+job_tfidf = tfidf[len(candidate_education):]
 
-
-
-
-# Matched Skills Percentage
-skill_match=[]
-for i in range(len(cleaned_skills)):
-    count=0;
-    for j in cleaned_skills_req[i]:
-        for k in cleaned_skills[i]:
-            if j in k:
-                count+=1;
-                break;
-    if len(cleaned_skills_req[i])==0:
-        skill_match.append(np.nan)
-    else:
-        match_percent=(count/len(cleaned_skills_req[i]));
-        skill_match.append(match_percent);
-resume_data['skill_match']=skill_match
-
+education_similarity = []
+for i in range(len(candidate_education)):
+    similarity = cosine_similarity(candidate_tfidf[i],job_tfidf[i])[0][0]
+    education_similarity.append(similarity)
+resume_data['education_similarity'] = education_similarity
 
 
 # TF-IDF and cosine similarity between job position and candidate position
@@ -297,13 +363,10 @@ job_tfidf = tfidf[len(candidate_positions):]
 
 position_similarity = []
 for i in range(len(candidate_positions)):
-    similarity = cosine_similarity(
-        candidate_tfidf[i],
-        job_tfidf[i]
-    )[0][0]
+    similarity = cosine_similarity(candidate_tfidf[i],job_tfidf[i])[0][0]
     position_similarity.append(similarity)
 resume_data['position_similarity'] = position_similarity
-print(resume_data['position_similarity'].describe())
+
 
 # EDA
 # ------------------
@@ -319,37 +382,38 @@ plt.show();
 resume_data['matched_score'].describe();
 
 # Random Forest 
+
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
-import numpy as np
 
-x = resume_data[['experience',
-                 'min_experience_requirement',
-                 'max_experience_requirement',
-                 'skill_match',
-                 'position_similarity']]
+x = resume_data[
+    ['experience',
+     'min_experience_requirement',
+     'max_experience_requirement',
+     'position_similarity',
+     'num_skills',
+     'num_skills_required',
+     'experience_required_years',
+     'has_age_requirement'] 
+]
 
 y = resume_data['matched_score']
 
-x_train, x_test, y_train, y_test = train_test_split(
-    x, y, test_size=0.2, random_state=42
-)
 
-min_median = x_train['min_experience_requirement'].median()
-max_median = x_train['max_experience_requirement'].median()
-skill_median = x_train['skill_match'].median()
+x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=0.2,random_state=42)
 
-x_train['min_experience_requirement'] = x_train['min_experience_requirement'].fillna(min_median)
-x_train['max_experience_requirement'] = x_train['max_experience_requirement'].fillna(max_median)
-x_train['skill_match'] = x_train['skill_match'].fillna(skill_median)
+# Handling Missing Values: Fill with median
+for column in x_train.columns:
+    if x_train[column].isna().any():
+        median = x_train[column].median()
+        x_train[column] = x_train[column].fillna(median)
+        x_test[column] = x_test[column].fillna(median)
 
-x_test['min_experience_requirement'] = x_test['min_experience_requirement'].fillna(min_median)
-x_test['max_experience_requirement'] = x_test['max_experience_requirement'].fillna(max_median)
-x_test['skill_match'] = x_test['skill_match'].fillna(skill_median)
 
 model = RandomForestRegressor(
-    n_estimators=100,
+    n_estimators=300,
+    max_depth=8,
     random_state=42
 )
 
@@ -360,6 +424,5 @@ y_pred = model.predict(x_test)
 print("R²:", r2_score(y_test, y_pred))
 print("MAE:", mean_absolute_error(y_test, y_pred))
 print("RMSE:", np.sqrt(mean_squared_error(y_test, y_pred)))
-
 
 
